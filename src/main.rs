@@ -69,6 +69,31 @@ fn main() {
 cpp!{{
     #include <stdio.h>
 
+    static const long hextable[] = {
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1, 0,1,2,3,4,5,6,7,8,9,-1,-1,-1,-1,-1,-1,-1,10,11,12,13,14,15,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,10,11,12,13,14,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
+    };
+
+    long long htoi_c_table(char *s) {
+        int offset = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 2 : 0;
+        long long result = 0;
+        for (char *temp = s + offset; *temp; temp++)
+        {
+            signed char digit = hextable[*temp];
+            result = (result << 4) + digit;
+        }
+        return result;
+    }
+
     long long htoi_c(char *s)
     {
         int offset = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 2 : 0;
@@ -125,8 +150,23 @@ mod tests {
             for _ in 0..RUNS {
                 let answer = unsafe {
                     cpp!([input as "char*"] -> u64 as "long long" {
-                    return htoi_c(input);
-                })
+                        return htoi_c(input);
+                    })
+                };
+                assert_eq!(answer, 0x1234AAFFEE7629);
+            }
+        })
+    }
+
+    #[bench]
+    fn c_htoi_table(b: &mut test::Bencher) {
+        let input = test::black_box("0x1234AAFFEE7629".as_bytes().as_ptr());
+        b.iter(|| {
+            for _ in 0..RUNS {
+                let answer = unsafe {
+                    cpp!([input as "char*"] -> u64 as "long long" {
+                        return htoi_c_table(input);
+                    })
                 };
                 assert_eq!(answer, 0x1234AAFFEE7629);
             }
