@@ -29,10 +29,10 @@ fn hex_to_u8(byte: u8) -> u8 {
     // Is in uppercase range
     if byte >= 65 && byte <= 90 {
         byte - 55
-        // Is in 0-9 range
+    // Is in 0-9 range
     } else if byte >= 48 && byte <= 57 {
         byte - '0' as u8
-        // Is in lowercase range
+    // Is in lowercase range
     } else if byte >= 97 && byte <= 122 {
         byte - 87
     } else {
