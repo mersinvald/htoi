@@ -1,3 +1,4 @@
-
+.idea/**
+htoi.iml
 /target
 **/*.rs.bk

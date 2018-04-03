@@ -1,5 +1,8 @@
-extern crate cpp_build;
+extern crate cc;
 
 fn main() {
-    cpp_build::build("src/main.rs");
+    cc::Build::new()
+        .file("htoi.c")
+        .opt_level(3)
+        .compile("libhtoi.a")
 }

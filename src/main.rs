@@ -1,8 +1,6 @@
 #![feature(test)]
 #![feature(universal_impl_trait)]
 
-#[macro_use]
-extern crate cpp;
 extern crate test;
 
 const HEX_TO_INT_TABLE: &[i8] = &[
@@ -40,82 +38,41 @@ fn hex_to_u8(byte: u8) -> u8 {
     }
 }
 
-fn htoi(s: &str, conv_fn: impl Fn(u8) -> u8) -> u64 {
+#[inline(never)]
+fn htoi(s: &str, conv_fn: impl Fn(u8) -> u8) -> i64 {
     // Drop the unicode as soon as it is possible
     // unicode is fucking slow
     let s = s.as_bytes();
 
     // Trim the prefix if there is one
-    let s = if s[1] == 'X' as u8 || s[1] == 'x' as u8 {
+    let second_char = s[1];
+    let s = if second_char == 'X' as u8
+                  || second_char == 'x' as u8 {
         &s[2..]
     } else {
         &s
     };
 
     s.iter()
-        .rev()
-        .enumerate()
-        .fold(0, |result, (idx, &byte)| {
-            let byte = conv_fn(byte) as u64;
-            result | (byte << idx * 4)
+        .fold(0, |result, &byte| {
+            let byte = conv_fn(byte) as i64;
+            (result << 4) + byte
         })
 }
 
 fn main() {
-    println!("0x12345 is {}", htoi("0x12345", hex_to_u8));
-    println!("0XFFFF is {}", htoi("0XFFFF", hex_to_u8_table));
+    println!("{}", htoi(test::black_box("0x1234AAFFEE7629"), hex_to_u8_table));
+    println!("{}", unsafe { c::htoi_c_table("0x1234AAFFEE7629".as_ptr()) })
 }
 
-cpp!{{
-    #include <stdio.h>
 
-    static const long hextable[] = {
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1, 0,1,2,3,4,5,6,7,8,9,-1,-1,-1,-1,-1,-1,-1,10,11,12,13,14,15,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,10,11,12,13,14,15,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
-    };
-
-    long long htoi_c_table(char *s) {
-        int offset = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 2 : 0;
-        long long result = 0;
-        for (char *temp = s + offset; *temp; temp++)
-        {
-            signed char digit = hextable[*temp];
-            result = (result << 4) + digit;
-        }
-        return result;
+mod c {
+    #[link(name="htoi", kind="static")]
+    extern "C" {
+        pub fn htoi_c_table(s: *const u8) -> i64;
+        pub fn htoi_c(s: *const u8) -> i64;
     }
-
-    long long htoi_c(char *s)
-    {
-        int offset = (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 2 : 0;
-        long long result = 0;
-        for (char *temp = s + offset; *temp; temp++)
-        {
-            signed char digit = ((*temp >= '0') && (*temp <= '9')) ?
-                (*temp - '0') :
-                (((*temp >= 'A') && (*temp <= 'F')) ?
-                    (*temp - 'A' + 10) :
-                    (((*temp >= 'a') && (*temp <= 'f')) ?
-                        (*temp - 'a' + 10) :
-                        -1));
-            if (digit==-1)
-            {
-                return -1;
-            }
-            result = (result << 4) + digit;
-        }
-        return result;
-    }
-}}
+}
 
 #[cfg(test)]
 mod tests {
@@ -135,7 +92,7 @@ mod tests {
 
     #[bench]
     fn rust_htoi_table(b: &mut test::Bencher) {
-        let input = test::black_box("0x1234AAFFEE7629");
+        let input = test::black_box("0X1234AAFFEE7629");
         b.iter(|| {
             for _ in 0..RUNS {
                 assert_eq!(htoi(input, hex_to_u8_table), 0x1234AAFFEE7629);
@@ -145,13 +102,11 @@ mod tests {
 
     #[bench]
     fn c_htoi(b: &mut test::Bencher) {
-        let input = test::black_box("0x1234AAFFEE7629".as_bytes().as_ptr());
+        let input = test::black_box("0x1234AAFFEE7629\0".as_bytes().as_ptr());
         b.iter(|| {
             for _ in 0..RUNS {
                 let answer = unsafe {
-                    cpp!([input as "char*"] -> u64 as "long long" {
-                        return htoi_c(input);
-                    })
+                    c::htoi_c(input)
                 };
                 assert_eq!(answer, 0x1234AAFFEE7629);
             }
@@ -160,18 +115,14 @@ mod tests {
 
     #[bench]
     fn c_htoi_table(b: &mut test::Bencher) {
-        let input = test::black_box("0x1234AAFFEE7629".as_bytes().as_ptr());
+        let input = test::black_box("0x1234AAFFEE7629\0".as_bytes().as_ptr());
         b.iter(|| {
             for _ in 0..RUNS {
                 let answer = unsafe {
-                    cpp!([input as "char*"] -> u64 as "long long" {
-                        return htoi_c_table(input);
-                    })
+                    c::htoi_c_table(input)
                 };
                 assert_eq!(answer, 0x1234AAFFEE7629);
             }
         })
     }
-
-
 }
